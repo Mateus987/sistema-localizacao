@@ -1,33 +1,49 @@
 import requests
 import random
-import sys
+import paho.mqtt.client as mqtt
+import json
+import time
 
 
-api_endpoint = "https://api.com/api/"
+mqtt_broker_address = "seu-broker-mqtt.com"
+mqtt_port = 1883
+mqtt_topic = "topic/para/enviar/coordenadas"
 
 
 def gerar_coordenadas():
-    latitude = random.uniform(-90, 90)  
+    latitude = random.uniform(-90, 90) 
     longitude = random.uniform(-180, 180) 
     return latitude, longitude
 
-while True:
+def on_connect(client, userdata, flags, rc):
+    print("Conectado ao MQTT Broker com código de resultado " + str(rc))
 
+mqtt_client = mqtt.Client()
+mqtt_client.on_connect = on_connect
+
+
+mqtt_client.connect(mqtt_broker_address, mqtt_port, 60)
+
+
+while True:
+  
     latitude, longitude = gerar_coordenadas()
+
 
     id_ = random.randint(1, 5)
 
-    url = f"{api_endpoint}{id_}/{latitude}/{longitude}"
+  
+    payload = {
+        "id": id_,
+        "latitude": latitude,
+        "longitude": longitude
+    }
 
-    response = requests.post(url)
+  
+    payload_json = json.dumps(payload)
 
-    if response.status_code == 200:
-        print(f"Coordenadas ({latitude}, {longitude}) enviadas com sucesso para a API.")
-    else:
-        print("Erro ao enviar coordenadas para a API.")
+  
+    mqtt_client.publish(mqtt_topic, payload_json)
 
-    try:
-        input("Pressione Enter para continuar ou Ctrl+C para sair...")
-    except KeyboardInterrupt:
-        print("Script interrompido manualmente.")
-        sys.exit()
+    print(f"Coordenadas ({latitude}, {longitude}) enviadas via MQTT para o tópico '{mqtt_topic}'.")
+
