@@ -1,6 +1,6 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request
 from flask_restful import Api, Resource
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO
 from flask_sqlalchemy import SQLAlchemy
 import datetime
 import json
@@ -26,36 +26,61 @@ class Localizacao(db.Model):
     latitude = db.Column(db.Float, nullable=False)
     longitude = db.Column(db.Float, nullable=False)
 
-# Implemente sua lógica para banco de dados e cache aqui
-
-# Dicionário temporário para simular um banco de dados
-dispositivos = {}
-
-# Implemente a lógica para a API RESTful de rastreamento aqui
 class DispositivoResource(Resource):
     def get(self, dispositivo_id):
-        if dispositivo_id in dispositivos:
-            return dispositivos[dispositivo_id]
+        dispositivo = Dispositivo.query.get(dispositivo_id)
+        if dispositivo:
+            return {
+                'id': dispositivo.id,
+                'nome': dispositivo.nome,
+                'codigo': dispositivo.codigo,
+                'marca': dispositivo.marca
+            }
         return {"message": "Dispositivo não encontrado"}, 404
 
     def put(self, dispositivo_id):
         data = request.get_json()
-        if dispositivo_id in dispositivos:
-            dispositivos[dispositivo_id].update(data)
+        dispositivo = Dispositivo.query.get(dispositivo_id)
+        if dispositivo:
+            dispositivo.nome = data.get('nome', dispositivo.nome)
+            dispositivo.codigo = data.get('codigo', dispositivo.codigo)
+            dispositivo.marca = data.get('marca', dispositivo.marca)
+            db.session.commit()
         else:
-            dispositivos[dispositivo_id] = data
-        return dispositivos[dispositivo_id]
+            new_dispositivo = Dispositivo(
+                id=dispositivo_id,
+                nome=data.get('nome'),
+                codigo=data.get('codigo'),
+                marca=data.get('marca')
+            )
+            db.session.add(new_dispositivo)
+            db.session.commit()
+
+        return {
+            'id': dispositivo_id,
+            'nome': data.get('nome'),
+            'codigo': data.get('codigo'),
+            'marca': data.get('marca')
+        }
 
     def delete(self, dispositivo_id):
-        if dispositivo_id in dispositivos:
-            del dispositivos[dispositivo_id]
+        dispositivo = Dispositivo.query.get(dispositivo_id)
+        if dispositivo:
+            db.session.delete(dispositivo)
+            db.session.commit()
             return {"message": "Dispositivo removido com sucesso"}
         return {"message": "Dispositivo não encontrado"}, 404
 
 class HistoricoLocalizacaoResource(Resource):
     def get(self, dispositivo_id):
-        # Implemente a lógica para recuperar o histórico de localizações de um dispositivo
-        pass
+        localizacoes = Localizacao.query.filter_by(id_dispositivo=dispositivo_id).all()
+        historico = []
+        for localizacao in localizacoes:
+            historico.append({
+                'latitude': localizacao.latitude,
+                'longitude': localizacao.longitude
+            })
+        return historico
 
 # Adicione os recursos à API
 api.add_resource(DispositivoResource, '/dispositivo/<string:dispositivo_id>')
@@ -70,3 +95,4 @@ def handle_connect():
 # Inicie o servidor SocketIO
 if __name__ == '_main_':
     db.create_all()
+    socketio.run(app)
