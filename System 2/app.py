@@ -82,17 +82,40 @@ class HistoricoLocalizacaoResource(Resource):
             })
         return historico
 
-# Adicione os recursos à API
 api.add_resource(DispositivoResource, '/dispositivo/<string:dispositivo_id>')
 api.add_resource(HistoricoLocalizacaoResource, '/historico/<string:dispositivo_id>')
 
-# Implemente lógica de WebSockets para fornecer a última localização em tempo real
+
 @socketio.on('connect')
 def handle_connect():
-    # Implemente a lógica para lidar com uma nova conexão de cliente WebSocket
-    pass
+    print('Cliente WebSocket conectado')
 
-# Inicie o servidor SocketIO
-if __name__ == '_main_':
-    db.create_all()
+@socketio.on('disconnect')
+def handle_disconnect():
+    print('Cliente WebSocket desconectado')
+
+def enviar_ultima_localizacao(dispositivo_id):
+    localizacao = Localizacao.query.filter_by(id_dispositivo=dispositivo_id).order_by(Localizacao.id.desc()).first()
+    if localizacao:
+        emit('update_location', {
+            'latitude': localizacao.latitude,
+            'longitude': localizacao.longitude
+        })
+
+import time
+
+def atualizar_localizacao_em_tempo_real():
+    while True:
+        dispositivos_ids = [dispositivo.id for dispositivo in Dispositivo.query.all()]
+        for dispositivo_id in dispositivos_ids:
+            enviar_ultima_localizacao(dispositivo_id)
+        time.sleep(1)
+
+if __name__ == '__main__':
+    from threading import Thread
+  
+    socket_thread = Thread(target=atualizar_localizacao_em_tempo_real)
+    socket_thread.start()
+
+
     socketio.run(app)

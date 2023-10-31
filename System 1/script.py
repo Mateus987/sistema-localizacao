@@ -7,7 +7,7 @@ def on_connect(client, userdata, flags, rc):
 
 client = mqtt.Client()
 client.on_connect = on_connect
-client.connect("mqtt.broker.com", 1883, 60)  # Substitua mqtt.broker.com pelo seu broker MQTT
+client.connect("mqtt.broker.com", 1883, 60)
 
 while True:
     device_id = "device123"
