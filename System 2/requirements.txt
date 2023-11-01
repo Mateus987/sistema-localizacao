@@ -1,0 +1,6 @@
+flask
+flask_restful
+flask_socketio
+flask_sqlalchemy
+redis
+redis[hiredis]

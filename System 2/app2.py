@@ -1,15 +1,13 @@
-from flask import Flask, request
+from flask import Flask, request, make_response, jsonify
 from flask_restful import Api, Resource
 from flask_socketio import SocketIO, emit
 from flask_sqlalchemy import SQLAlchemy
-import datetime
-import json
 import uuid
 
 app = Flask(__name__)
 api = Api(app)
 socketio = SocketIO(app)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.sqlite3'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
@@ -38,6 +36,24 @@ class DispositivoResource(Resource):
             }
         return {"message": "Dispositivo não encontrado"}, 404
 
+    def post(self):
+        data = request.get_json()
+
+        new_dispositivo = Dispositivo(
+                nome=data.get('nome'),
+                codigo=data.get('codigo'),
+                marca=data.get('marca')
+            )
+        db.session.add(new_dispositivo)
+        db.session.commit()
+
+        return {
+            'id': new_dispositivo.id,
+            'nome': data.get('nome'),
+            'codigo': data.get('codigo'),
+            'marca': data.get('marca')
+        }
+
     def put(self, dispositivo_id):
         data = request.get_json()
         dispositivo = Dispositivo.query.get(dispositivo_id)
@@ -47,14 +63,7 @@ class DispositivoResource(Resource):
             dispositivo.marca = data.get('marca', dispositivo.marca)
             db.session.commit()
         else:
-            new_dispositivo = Dispositivo(
-                id=dispositivo_id,
-                nome=data.get('nome'),
-                codigo=data.get('codigo'),
-                marca=data.get('marca')
-            )
-            db.session.add(new_dispositivo)
-            db.session.commit()
+            return "Dispotivo não encontrado!"
 
         return {
             'id': dispositivo_id,
@@ -82,48 +91,12 @@ class HistoricoLocalizacaoResource(Resource):
             })
         return historico
 
-api.add_resource(DispositivoResource, '/dispositivo/<string:dispositivo_id>')
+api.add_resource(DispositivoResource, '/dispositivo', '/dispositivo/<string:dispositivo_id>')
 api.add_resource(HistoricoLocalizacaoResource, '/historico/<string:dispositivo_id>')
 
+@app.route("/")
+def raiz():
+    return make_response(jsonify({"Mensagem" : "Api esta funcionando!"})), 200
 
-@socketio.on('connect')
-def handle_connect():
-    print('Cliente WebSocket conectado')
-
-@socketio.on('disconnect')
-def handle_disconnect():
-    print('Cliente WebSocket desconectado')
-
-def enviar_ultima_localizacao(dispositivo_id):
-    localizacao = Localizacao.query.filter_by(id_dispositivo=dispositivo_id).order_by(Localizacao.id.desc()).first()
-    if localizacao:
-        emit('update_location', {
-            'latitude': localizacao.latitude,
-            'longitude': localizacao.longitude
-        })
-
-import time
-
-def atualizar_localizacao_em_tempo_real():
-    while True:
-        dispositivos_ids = [dispositivo.id for dispositivo in Dispositivo.query.all()]
-        for dispositivo_id in dispositivos_ids:
-            enviar_ultima_localizacao(dispositivo_id)
-        time.sleep(1)
-
-if __name__ == '__main__':
-    from threading import Thread
-
-    with app.app_context():
-        socket_thread = Thread(target=atualizar_localizacao_em_tempo_real)
-        socket_thread.start()
-
-        socketio.run(app)
-
-"""
-API de Rastreio
-- Um banco de dados
-- Com cache Redis
-- REST
-- E essa api fornece dados para o front end por meio de um web socket
-"""
+if __name__ == "__main__":
+    app.run("127.0.0.1", 3333, False)
