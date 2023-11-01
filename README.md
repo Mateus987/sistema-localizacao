@@ -7,7 +7,7 @@
 
 * Instalar o erlang: https://www.erlang.org/downloads
 
-* Instalar o Rabit MQ: https://www.rabbitmq.com/download.html
+* Instalar o Rabbit MQ: https://www.rabbitmq.com/download.html
 
 * Instalar o Windows Subsystem for Linux: https://learn.microsoft.com/en-us/windows/wsl/install
 
@@ -15,7 +15,7 @@ Esse cara é basicamente rodar um ```wsl --install```, se seu PC for compativel 
 
 ### Docs:
 * Flask: https://flask.palletsprojects.com/en/2.3.x/
-* Rabit MQ: https://www.rabbitmq.com/documentation.html
+* Rabbit MQ: https://www.rabbitmq.com/documentation.html
 * Redis: https://redis.io/docs/connect/clients/python/
 
 ### System 1
