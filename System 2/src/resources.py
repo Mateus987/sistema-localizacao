@@ -1,11 +1,12 @@
-from flask import request
+from flask import request, make_response, jsonify
 from flask_restful import Resource
 from src import db, api
 from src.models import Dispositivo, Localizacao
+from src.redis import send_dict, get_valid_records
 
 class DispositivoResource(Resource):
-    def get(self, dispositivo_id):
-        dispositivo = Dispositivo.query.get(dispositivo_id)
+    def get(self, id_dispositivo):
+        dispositivo = Dispositivo.query.get(id_dispositivo)
         if dispositivo:
             return {
                 'id': dispositivo.id,
@@ -33,9 +34,9 @@ class DispositivoResource(Resource):
             'marca': data.get('marca')
         }
 
-    def put(self, dispositivo_id):
+    def put(self, id_dispositivo):
         data = request.get_json()
-        dispositivo = Dispositivo.query.get(dispositivo_id)
+        dispositivo = Dispositivo.query.get(id_dispositivo)
         if dispositivo:
             dispositivo.nome = data.get('nome', dispositivo.nome)
             dispositivo.codigo = data.get('codigo', dispositivo.codigo)
@@ -45,14 +46,14 @@ class DispositivoResource(Resource):
             return "Dispotivo não encontrado!"
 
         return {
-            'id': dispositivo_id,
+            'id': id_dispositivo,
             'nome': data.get('nome'),
             'codigo': data.get('codigo'),
             'marca': data.get('marca')
         }
 
-    def delete(self, dispositivo_id):
-        dispositivo = Dispositivo.query.get(dispositivo_id)
+    def delete(self, id_dispositivo):
+        dispositivo = Dispositivo.query.get(id_dispositivo)
         if dispositivo:
             db.session.delete(dispositivo)
             db.session.commit()
@@ -71,6 +72,22 @@ class LocalizacaoResource(Resource):
         db.session.add(new_localizacao)
         db.session.commit()
 
+        dispositivo = Dispositivo.query.get(new_localizacao.id_dispositivo)
+
+        data = {"id_dispositivo" : dispositivo.id
+                ,"nome" : dispositivo.nome
+                ,"codigo" : dispositivo.codigo
+                ,"marca" : dispositivo.marca
+                ,"id_localizacao" : new_localizacao.id
+                ,"latitude" : new_localizacao.latitude
+                ,"longitude" : new_localizacao.longitude
+            }
+
+        # REDIS
+        send_dict(data)
+
+        # WEB SOCKET
+
         return {
             'id': new_localizacao.id,
             'id_dispositivo': data.get('id_dispositivo'),
@@ -79,16 +96,12 @@ class LocalizacaoResource(Resource):
         }
 
 class HistoricoLocalizacaoResource(Resource):
-    def get(self, dispositivo_id):
-        localizacoes = Localizacao.query.filter_by(id_dispositivo=dispositivo_id).all()
-        historico = []
-        for localizacao in localizacoes:
-            historico.append({
-                'latitude': localizacao.latitude,
-                'longitude': localizacao.longitude
-            })
-        return historico
+    def get(self, id_dispositivo):
+        try:
+            return get_valid_records(id_dispositivo)
+        except Exception:
+            return make_response(jsonify("Internal Server Error")), 500
 
-api.add_resource(DispositivoResource, '/dispositivo', '/dispositivo/<string:dispositivo_id>')
-api.add_resource(HistoricoLocalizacaoResource, '/historico/<string:dispositivo_id>')
+api.add_resource(DispositivoResource, '/dispositivo', '/dispositivo/<string:id_dispositivo>')
+api.add_resource(HistoricoLocalizacaoResource, '/historico/<string:id_dispositivo>')
 api.add_resource(LocalizacaoResource, '/localizacao')

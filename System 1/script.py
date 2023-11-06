@@ -12,5 +12,5 @@ while True:
     longitude = random.uniform(-180, 180)
     payload = '{{"id_dispositivo": "{}", "latitude": {}, "longitude": {}}}'.format(id_dispositivo, latitude, longitude)
     channel.basic_publish("", "localizacao", payload)
-    print("Dados enviados: {}".format(payload))
-    time.sleep(3)
+    print(f"Dados enviados: {payload}")
+    time.sleep(30)
