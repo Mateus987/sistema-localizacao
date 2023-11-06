@@ -32,6 +32,5 @@ API Restful em Flask
 - Web Socket que envia a ultima localização
 
 ### TODO
-* Integração com o Redis no System 2
-* Teste resource "histórico" do System 2
-* Web Socket no System 2
+* Sistema 3
+* Padronização com Pylint

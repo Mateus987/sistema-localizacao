@@ -1,8 +1,10 @@
+import json
 from flask import request, make_response, jsonify
 from flask_restful import Resource
 from src import db, api
 from src.models import Dispositivo, Localizacao
 from src.redis import send_dict, get_valid_records
+from websockets.sync.client import connect
 
 class DispositivoResource(Resource):
     def get(self, id_dispositivo):
@@ -87,6 +89,8 @@ class LocalizacaoResource(Resource):
         send_dict(data)
 
         # WEB SOCKET
+        with connect("ws://localhost:8765") as websocket:
+            websocket.send(json.dumps(data))
 
         return {
             'id': new_localizacao.id,
