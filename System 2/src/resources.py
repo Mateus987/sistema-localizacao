@@ -5,6 +5,7 @@ from src import db, api
 from src.models import Dispositivo, Localizacao
 from src.redis import send_dict, get_valid_records
 from websockets.sync.client import connect
+from datetime import datetime
 
 class DispositivoResource(Resource):
     def get(self, id_dispositivo):
@@ -77,16 +78,17 @@ class LocalizacaoResource(Resource):
         dispositivo = Dispositivo.query.get(new_localizacao.id_dispositivo)
 
         data = {"id_dispositivo" : dispositivo.id
-                ,"nome" : dispositivo.nome
-                ,"codigo" : dispositivo.codigo
-                ,"marca" : dispositivo.marca
                 ,"id_localizacao" : new_localizacao.id
                 ,"latitude" : new_localizacao.latitude
                 ,"longitude" : new_localizacao.longitude
+                ,"data" : datetime.now()
             }
 
         # REDIS
         send_dict(data)
+
+        del data["id_localizacao"]
+        del data["data"]
 
         # WEB SOCKET
         with connect("ws://localhost:8765") as websocket:

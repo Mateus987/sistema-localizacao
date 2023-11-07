@@ -33,4 +33,8 @@ API Restful em Flask
 
 ### TODO
 * Sistema 3
+  - GRPC Server Pavimentado
+  - GRPC Cliente com exemplo pronto, só integrar no front
+  - Aguardando Graph QL
+  - Fazer o front
 * Padronização com Pylint

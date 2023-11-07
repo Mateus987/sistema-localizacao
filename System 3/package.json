@@ -1,0 +1,19 @@
+{
+  "name": "system-3",
+  "version": "1.0.0",
+  "description": "Sistema 3 do Trabalho Final do Sabatine",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "EPICO"
+  ],
+  "author": "Os Homens",
+  "license": "ISC",
+  "dependencies": {
+    "@grpc/grpc-js": "^1.9.9",
+    "minimist": "^1.2.8",
+    "sqlite3": "^5.1.6"
+  }
+}
