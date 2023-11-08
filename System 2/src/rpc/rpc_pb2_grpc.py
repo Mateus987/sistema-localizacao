@@ -24,16 +24,6 @@ class ApiServiceStub(object):
                 request_serializer=rpc__pb2.SendDispoRequest.SerializeToString,
                 response_deserializer=rpc__pb2.SendDispoReply.FromString,
                 )
-        self.SendPos = channel.unary_unary(
-                '/trabalho_sabatine.ApiService/SendPos',
-                request_serializer=rpc__pb2.SendPosRequest.SerializeToString,
-                response_deserializer=rpc__pb2.SendPosReply.FromString,
-                )
-        self.SendPosStreamReply = channel.unary_stream(
-                '/trabalho_sabatine.ApiService/SendPosStreamReply',
-                request_serializer=rpc__pb2.SendPosRequest.SerializeToString,
-                response_deserializer=rpc__pb2.SendPosReply.FromString,
-                )
 
 
 class ApiServiceServicer(object):
@@ -51,18 +41,6 @@ class ApiServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def SendPos(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def SendPosStreamReply(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
 
 def add_ApiServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -75,16 +53,6 @@ def add_ApiServiceServicer_to_server(servicer, server):
                     servicer.SendDispoStreamReply,
                     request_deserializer=rpc__pb2.SendDispoRequest.FromString,
                     response_serializer=rpc__pb2.SendDispoReply.SerializeToString,
-            ),
-            'SendPos': grpc.unary_unary_rpc_method_handler(
-                    servicer.SendPos,
-                    request_deserializer=rpc__pb2.SendPosRequest.FromString,
-                    response_serializer=rpc__pb2.SendPosReply.SerializeToString,
-            ),
-            'SendPosStreamReply': grpc.unary_stream_rpc_method_handler(
-                    servicer.SendPosStreamReply,
-                    request_deserializer=rpc__pb2.SendPosRequest.FromString,
-                    response_serializer=rpc__pb2.SendPosReply.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -127,39 +95,5 @@ class ApiService(object):
         return grpc.experimental.unary_stream(request, target, '/trabalho_sabatine.ApiService/SendDispoStreamReply',
             rpc__pb2.SendDispoRequest.SerializeToString,
             rpc__pb2.SendDispoReply.FromString,
-            options, channel_credentials,
-            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
-
-    @staticmethod
-    def SendPos(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/trabalho_sabatine.ApiService/SendPos',
-            rpc__pb2.SendPosRequest.SerializeToString,
-            rpc__pb2.SendPosReply.FromString,
-            options, channel_credentials,
-            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
-
-    @staticmethod
-    def SendPosStreamReply(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_stream(request, target, '/trabalho_sabatine.ApiService/SendPosStreamReply',
-            rpc__pb2.SendPosRequest.SerializeToString,
-            rpc__pb2.SendPosReply.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

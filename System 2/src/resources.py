@@ -86,12 +86,14 @@ class LocalizacaoResource(Resource):
                 ,"id_localizacao" : new_localizacao.id
                 ,"latitude" : new_localizacao.latitude
                 ,"longitude" : new_localizacao.longitude
+                ,"data" : datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
             }
 
         # REDIS
         send_dict(data)
 
         del data["id_localizacao"]
+        del data["data"]
 
         # WEB SOCKET
         with connect("ws://localhost:8765") as websocket:

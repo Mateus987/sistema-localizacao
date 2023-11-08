@@ -2,6 +2,9 @@ flask
 flask_restful
 flask_socketio
 flask_sqlalchemy
+pika
 redis
 redis[hiredis]
 websockets
+grpcio
+grpcio-tools

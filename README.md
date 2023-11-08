@@ -13,6 +13,8 @@
 
 Esse cara é basicamente rodar um ```wsl --install```, se seu PC for compativel ele vai instalar tudo, ai é só reiniciar e terminar a configuração do usuário Linux
 
+* Linha que gera os arquivos do GRPC no python: ```python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. your_service.proto```
+
 ### Docs:
 * Flask: https://flask.palletsprojects.com/en/2.3.x/
 * Rabbit MQ: https://www.rabbitmq.com/documentation.html
@@ -31,10 +33,15 @@ API Restful em Flask
 - CRUD dos dispositivos salvos no banco (essa crud vai consumida principalmente pelo front do System 1)
 - Web Socket que envia a ultima localização
 
+### System 3
+API de Metricas
+- Recebe os dispositivos registrados na API por GRPC
+- Recebe todas as localizações registradas na API por Web Socket, e com uma lógica salva as infos desse dispositivo aqui
+- Graph QL é usado para fazer buscas no banco local dessa aplicação
+- Front end com as metricas e ultimas posições
+
 ### TODO
 * Sistema 3
-  - GRPC Server Pavimentado
-  - GRPC Cliente com exemplo pronto, só integrar no front
-  - Aguardando Graph QL
+  - Graph QL
   - Fazer o front
 * Padronização com Pylint

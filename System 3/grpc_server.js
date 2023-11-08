@@ -26,26 +26,6 @@ function sendDispo(call, callback) {
     callback(null, { message: "Dispo Recebido" });
 }
 
-const insertPos = db.prepare('INSERT INTO dispo_info (id_dispositivo, quantidade_pos, total_km, data) VALUES (?, ?)');
-
-function sendPos(call, callback) {
-    db.get(
-        'SELECT * FROM dispo_info WHERE id = ? ORDER BY data DESC LIMIT 1',
-        [call.request.id_dispositivo],
-        (err, row) => {
-            if (err) {
-                console.error(err.message);
-            } else {
-                if (row) {
-                    insertPos.run(id_dispositivo, row.quantidade_pos+1, 0, new Date());
-                } else {
-                    insertPos.run(id_dispositivo, 1, 0, new Date())
-                }
-            }
-        });
-    callback(null, { message: "Pos Recebida" });
-}
-
 function onShutdown() {
     db.close((err) => {
         if (err) {
@@ -60,7 +40,7 @@ function onShutdown() {
 
 function main() {
     var server = new grpc.Server();
-    server.addService(trabalho_proto.ApiService.service, { SendDispo: sendDispo, SendPos: sendPos });
+    server.addService(trabalho_proto.ApiService.service, { SendDispo: sendDispo });
 
     server.tryShutdown = onShutdown;
 

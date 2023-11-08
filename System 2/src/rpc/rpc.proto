@@ -6,10 +6,6 @@ service ApiService {
   rpc SendDispo (SendDispoRequest) returns (SendDispoReply) {}
 
   rpc SendDispoStreamReply (SendDispoRequest) returns (stream SendDispoReply) {}
-
-  rpc SendPos (SendPosRequest) returns (SendPosReply) {}
-
-  rpc SendPosStreamReply (SendPosRequest) returns (stream SendPosReply) {}
 }
 
 message SendDispoRequest {
@@ -18,15 +14,5 @@ message SendDispoRequest {
 }
 
 message SendDispoReply {
-  string message = 1;
-}
-
-message SendPosRequest {
-  string id_dispositivo = 1;
-  float lat = 2;
-  float long = 3;
-}
-
-message SendPosReply {
   string message = 1;
 }
