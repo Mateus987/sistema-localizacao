@@ -7,6 +7,8 @@ from src.redis import send_dict, get_valid_records
 from websockets.sync.client import connect
 from datetime import datetime
 
+from src import grpc
+
 class DispositivoResource(Resource):
     def get(self, id_dispositivo):
         dispositivo = Dispositivo.query.get(id_dispositivo)
@@ -29,6 +31,9 @@ class DispositivoResource(Resource):
             )
         db.session.add(new_dispositivo)
         db.session.commit()
+
+        # Envia pro GRPC
+        grpc.send_grpc_dispo(new_dispositivo.id, new_dispositivo.marca)
 
         return {
             'id': new_dispositivo.id,
@@ -81,14 +86,12 @@ class LocalizacaoResource(Resource):
                 ,"id_localizacao" : new_localizacao.id
                 ,"latitude" : new_localizacao.latitude
                 ,"longitude" : new_localizacao.longitude
-                ,"data" : datetime.now()
             }
 
         # REDIS
         send_dict(data)
 
         del data["id_localizacao"]
-        del data["data"]
 
         # WEB SOCKET
         with connect("ws://localhost:8765") as websocket:

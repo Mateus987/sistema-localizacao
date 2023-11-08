@@ -1,7 +1,7 @@
-var PROTO_PATH = __dirname + '/grpc.proto';
+var PROTO_PATH = '../System 2/src/rpc/rpc.proto';
 
 const sqlite3 = require('sqlite3').verbose();
-const db = new sqlite3.Database('../System 2/instance/database.sqlite3');
+const db = new sqlite3.Database('./database.sqlite3');
 
 var grpc = require('@grpc/grpc-js');
 var protoLoader = require('@grpc/proto-loader');
@@ -19,25 +19,31 @@ var packageDefinition = protoLoader.loadSync(
 
 var trabalho_proto = grpc.loadPackageDefinition(packageDefinition).trabalho_sabatine;
 
-function getDispoById(id_dispositivo, callback) {
-    const query = 'SELECT * FROM dispositivo WHERE id = ?';
-    db.get(query, [id_dispositivo], (err, row) => {
-        callback(err, row);
-    });
+const insertDispo = db.prepare('INSERT INTO dispositivo (id_dispositivo, marca) VALUES (?, ?)');
+
+function sendDispo(call, callback) {
+    insertDispo.run(call.request.id_dispositivo, call.request.marca);
+    callback(null, { message: "Dispo Recebido" });
 }
 
-function getDispo(call, callback) {
-    getDispoById(call.request.id_dispositivo, (err, dispo) => {
-        if (err) {
-            console.error(err.message);
-        } else {
-            if (dispo) {
-                callback(null, { id_dispositivo: dispo.id, nome: dispo.nome, codigo: dispo.codigo, marca: dispo.marca });
+const insertPos = db.prepare('INSERT INTO dispo_info (id_dispositivo, quantidade_pos, total_km, data) VALUES (?, ?)');
+
+function sendPos(call, callback) {
+    db.get(
+        'SELECT * FROM dispo_info WHERE id = ? ORDER BY data DESC LIMIT 1',
+        [call.request.id_dispositivo],
+        (err, row) => {
+            if (err) {
+                console.error(err.message);
             } else {
-                callback(null, null);
+                if (row) {
+                    insertPos.run(id_dispositivo, row.quantidade_pos+1, 0, new Date());
+                } else {
+                    insertPos.run(id_dispositivo, 1, 0, new Date())
+                }
             }
-        }
-    });
+        });
+    callback(null, { message: "Pos Recebida" });
 }
 
 function onShutdown() {
@@ -54,7 +60,7 @@ function onShutdown() {
 
 function main() {
     var server = new grpc.Server();
-    server.addService(trabalho_proto.ApiService.service, { GetDispo: getDispo });
+    server.addService(trabalho_proto.ApiService.service, { SendDispo: sendDispo, SendPos: sendPos });
 
     server.tryShutdown = onShutdown;
 
