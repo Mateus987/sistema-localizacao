@@ -1,91 +1,112 @@
-var express = require("express")
-var { graphqlHTTP } = require("express-graphql")
-var { buildSchema } = require("graphql")
+const express = require('express');
+const { graphqlHTTP } = require('express-graphql');
+const { buildSchema } = require('graphql');
+const { DateScalar } = require("./graph_ql_date_scalar");
 
-// Construct a schema, using GraphQL schema language
-var schema = buildSchema(`
-  input MessageInput {
-    content: String
-    author: String
-  }
+const sqlite3 = require('sqlite3').verbose();
 
-  type Message {
-    id: ID!
-    content: String
-    author: String
+// Connect to the SQLite database (or create a new one if it doesn't exist)
+const db = new sqlite3.Database('database.sqlite3');
+
+// Define GraphQL schema
+const schema = buildSchema(`
+  scalar Date
+
+  type Dispositivo {
+    id_dispositivo: String
+    marca: String
+    quantidade_pos: Int
+    total_km: Float
+    data: Date
   }
 
   type Query {
-    getMessage(id: ID!): Message
-    getMessages: [Message]
+    geral: [Dispositivo]
+    por_dispo(id_dispositivo: String): [Dispositivo]
+    por_marca(marca: String): [Dispositivo]
   }
+`);
 
-  type Mutation {
-    createMessage(input: MessageInput): Message
-    updateMessage(id: ID!, input: MessageInput): Message
-    deleteMessage(id: ID!): String
-  }
-`)
+// Define resolvers
+const resolvers = {
+    geral: () => {
+        // Query data from the SQLite database
+        return new Promise((resolve, reject) => {
+            let query = `
+        SELECT dispo.id_dispositivo, dispo.marca, dispo_info.quantidade_pos, dispo_info.total_km, dispo_info.data
+        FROM dispositivo AS dispo
+        LEFT JOIN dispo_info ON dispo.id_dispositivo = dispo_info.id_dispositivo
+        ORDER BY data DESC
+      `;
 
-// If Message had any complex fields, we'd put them on this object.
-class Message {
-  constructor(id, { content, author }) {
-    this.id = id
-    this.content = content
-    this.author = author
-  }
-}
+            db.all(query, (err, rows) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(rows);
+                }
+            });
+        });
+    },
 
-// Maps username to content
-var fakeDatabase = {}
+    por_dispo: (data) => {
+        // Query data from the SQLite database
+        return new Promise((resolve, reject) => {
+            let query = `
+        SELECT dispo.id_dispositivo, dispo.marca, dispo_info.quantidade_pos, dispo_info.total_km, dispo_info.data
+        FROM dispositivo AS dispo
+        LEFT JOIN dispo_info ON dispo.id_dispositivo = dispo_info.id_dispositivo
+        WHERE dispo.id_dispositivo = ?
+        ORDER BY data DESC
+      `;
 
-var root = {
-  getMessage: ({ id }) => {
-    if (!fakeDatabase[id]) {
-      throw new Error("No message exists with id " + id)
-    }
-    return new Message(id, fakeDatabase[id])
-  },
-  getMessages: () => {
-    let messages = [];
-    for(let id in fakeDatabase) {
-        messages.push(new Message(id, fakeDatabase[id]))
-    }
-    return messages;
-  },
-  createMessage: ({ input }) => {
-    // Create a random id for our "database".
-    var id = require("crypto").randomBytes(10).toString("hex")
+            db.all(query, [data.id_dispositivo], (err, rows) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(rows);
+                }
+            });
+        });
+    },
 
-    fakeDatabase[id] = input
-    return new Message(id, input)
-  },
-  updateMessage: ({ id, input }) => {
-    if (!fakeDatabase[id]) {
-      throw new Error("no message exists with id " + id)
-    }
-    // This replaces all old data, but some apps might want partial update.
-    fakeDatabase[id] = input
-    return new Message(id, input)
-  },
-  deleteMessage: ({id}) => {
-    if (!fakeDatabase[id]) {
-        throw new Error("no message exists with id " + id)
-    }
-    delete fakeDatabase[id]
-    return  "Message of id " + id + " removed"
-  }
-}
+    por_marca: (data) => {
+        // Query data from the SQLite database
+        return new Promise((resolve, reject) => {
+            let query = `
+        SELECT dispo.id_dispositivo, dispo.marca, dispo_info.quantidade_pos, dispo_info.total_km, dispo_info.data
+        FROM dispositivo AS dispo
+        LEFT JOIN dispo_info ON dispo.id_dispositivo = dispo_info.id_dispositivo
+        WHERE dispo.marca = ?
+        ORDER BY data DESC
+      `;
 
-var app = express()
+            db.all(query, [data.marca], (err, rows) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(rows);
+                }
+            });
+        });
+    },
+};
+
+// Create an express app
+const app = express();
+
+// Set up GraphQL middleware
 app.use(
-  "/graphql",
-  graphqlHTTP({
-    schema: schema,
-    rootValue: root,
-    graphiql: true,
-  })
-)
-app.listen(4000, () => {
-  console.log("Running a GraphQL API server at localhost:4000/graphql")
-})
+    '/graphql',
+    graphqlHTTP({
+        schema: schema,
+        rootValue: resolvers,
+        graphiql: true, // Enable GraphiQL interface for testing
+    })
+);
+
+// Start the server
+const PORT = 3000;
+app.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}/graphql`);
+});

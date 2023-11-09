@@ -7,8 +7,6 @@ const db = new sqlite3.Database('./database.sqlite3');
 
 const insertPos = db.prepare('INSERT INTO dispo_info (id_dispositivo, quantidade_pos, total_km, data) VALUES (?, ?, ?, ?)');
 
-const updatePos = 'UPDATE dispo_info SET quantidade_pos = ?, total_km = ?, data = ? WHERE id_dispositivo = ?';
-
 function calculateDistance(lat1, lon1, lat2, lon2) {
     const R = 6371; // Radius of the Earth in kilometers
     const dLat = deg2rad(lat2 - lat1);
@@ -73,15 +71,9 @@ function receive_messages() {
                                 console.error(err.message);
                             } else {
                                 if (row) {
-                                    db.run(updatePos, [row.quantidade_pos+1, row.total_km+total_km, new Date(), message.id_dispositivo], function (err) {
-                                        if (err) {
-                                            console.error('Error updating data:', err.message);
-                                        } else {
-                                            console.log(`Rows affected: ${this.changes}`);
-                                        }
-                                    });
+                                    insertPos.run(message.id_dispositivo, row.quantidade_pos+1, row.total_km+total_km, new Date());
                                 } else {
-                                    insertPos.run(message.id_dispositivo, 1, total_km, new Date())
+                                    insertPos.run(message.id_dispositivo, 1, total_km, new Date());
                                 }
                             }
                         });

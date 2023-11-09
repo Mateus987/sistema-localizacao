@@ -6,8 +6,10 @@ CREATE TABLE IF NOT EXISTS dispositivo (
 );
 
 CREATE TABLE IF NOT EXISTS dispo_info (
-	id_dispositivo CHAR(36) PRIMARY KEY
+	id_dispositivo CHAR(36)
 	,quantidade_pos NUMERIC DEFAULT(0)
 	,total_km REAL DEFAULT(0)
 	,data TEXT
+	
+	,FOREIGN KEY (id_dispositivo) REFERENCES dispositivo(id_dispositivo)
 );
