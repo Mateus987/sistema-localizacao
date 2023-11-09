@@ -14,6 +14,9 @@ start py ".\System 2\consume_queue.py"
 
 echo "Inicializando o Sistema 3"
 start node ".\System 3\grpc_server.js"
+start node ".\System 3\web_socket_client.js"
+start node ".\System 3\graph_ql.js"
+start node ".\System 3\expurgo.js"
 
 echo "Todos os sistemas inicializado!"
 

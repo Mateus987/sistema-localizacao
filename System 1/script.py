@@ -13,4 +13,4 @@ while True:
     payload = '{{"id_dispositivo": "{}", "latitude": {}, "longitude": {}}}'.format(id_dispositivo, latitude, longitude)
     channel.basic_publish("", "localizacao", payload)
     print(f"Dados enviados: {payload}")
-    time.sleep(30)
+    time.sleep(3)

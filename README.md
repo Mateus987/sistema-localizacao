@@ -15,10 +15,20 @@ Esse cara é basicamente rodar um ```wsl --install```, se seu PC for compativel 
 
 * Linha que gera os arquivos do GRPC no python: ```python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. your_service.proto```
 
+* Instalar o node: https://nodejs.org/en/download/current
+
+* Instalar os pacotes node do System 3
+```npm install```
+
 ### Docs:
-* Flask: https://flask.palletsprojects.com/en/2.3.x/
 * Rabbit MQ: https://www.rabbitmq.com/documentation.html
+* Flask: https://flask.palletsprojects.com/en/2.3.x/
+* Web Sockets Python (Server): https://websockets.readthedocs.io/en/stable/
 * Redis: https://redis.io/docs/connect/clients/python/
+* GRPC Python (Cliente): https://grpc.io/docs/languages/python/
+* GRPC Node (Servidor): https://grpc.io/docs/languages/node/
+* Web Sockets Node (Cliente): https://github.com/websockets/ws/blob/master/doc/ws.md
+* Graph QL: https://graphql.org/graphql-js/
 
 ### System 1
 * Script - Gera localizações para x dispositivo e envia elas pra queue "localizacao" do Rabit MQ
@@ -37,11 +47,5 @@ API Restful em Flask
 API de Metricas
 - Recebe os dispositivos registrados na API por GRPC
 - Recebe todas as localizações registradas na API por Web Socket, e com uma lógica salva as infos desse dispositivo aqui
-- Graph QL é usado para fazer buscas no banco local dessa aplicação
-- Front end com as metricas e ultimas posições
-
-### TODO
-* Sistema 3
-  - Graph QL
-  - Fazer o front
-* Padronização com Pylint
+- Graph QL é usado para fazer buscas no banco local dessa aplicação e fornecer as métricas
+- Front end que mostra a ultima posição vinda do Web Socket

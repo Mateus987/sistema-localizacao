@@ -1,0 +1,1052 @@
+***** .gitignore *****
+__pycache_
+*.pyc
+
+node_modules
+
+***** gerar_txt_entrega.py *****
+
+
+***** README.md *****
+
+
+***** start.bat *****
+@echo off
+
+echo "Inicializando Sistema 1"
+start py ".\System 1\script.py"
+start py ".\System 1\api.py"
+
+echo "Incialize o REDIS"
+pause
+
+echo "Inicializando Sistema 2"
+start py ".\System 2\api.py"
+start py ".\System 2\web_socket.py"
+start py ".\System 2\consume_queue.py"
+
+echo "Inicializando o Sistema 3"
+start node ".\System 3\grpc_server.js"
+start node ".\System 3\web_socket_client.js"
+start node ".\System 3\graph_ql.js"
+start node ".\System 3\expurgo.js"
+
+echo "Todos os sistemas inicializado!"
+
+pause
+
+***** System 1\api.py *****
+import pika
+
+connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+channel = connection.channel()
+channel.queue_declare(queue='localizacao')
+channel.queue_declare(queue='localizacao_queue')
+
+def on_message(ch, method, properties, body):
+    data = body.decode("utf-8")
+    channel.basic_publish(exchange='', routing_key='localizacao_queue', body=data)
+    print("Dados recebidos via MQTT e encaminhados para a fila: {}".format(data))
+
+channel.basic_consume(queue="localizacao", auto_ack=True, on_message_callback=on_message)
+channel.start_consuming()
+
+
+***** System 1\requirements.txt *****
+pika
+
+***** System 1\script.py *****
+import time
+import random
+import pika
+
+connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+channel = connection.channel()
+channel.queue_declare(queue='localizacao')
+
+while True:
+    id_dispositivo = "cbda669f-2290-4e48-89d0-cae50e001441"
+    latitude = random.uniform(-90, 90)
+    longitude = random.uniform(-180, 180)
+    payload = '{{"id_dispositivo": "{}", "latitude": {}, "longitude": {}}}'.format(id_dispositivo, latitude, longitude)
+    channel.basic_publish("", "localizacao", payload)
+    print(f"Dados enviados: {payload}")
+    time.sleep(3)
+
+
+***** System 2\api.py *****
+from src import app
+
+if __name__ == "__main__":
+    app.run("127.0.0.1", 3333, False)
+
+"""
+API de Rastreio
+- Um banco de dados
+- Com cache Redis
+- REST
+- E essa api fornece dados para o front end por meio de um web socket
+"""
+
+***** System 2\consume_queue.py *****
+import json
+import pika
+import time
+import requests
+
+def get_elements_in_queue(ch, method, properties, body):
+    element = json.loads(body.decode("utf-8"))
+    print(f"Queue: {method.routing_key}, Mensagem: {element}")
+    for n_try in range(3):
+        try:
+            req = requests.post("http://localhost:3333/localizacao", json=element)
+            if req.status_code != 200:
+                print(f"Erro ao salvar dados no banco\nStatus Code: {req.status_code}\nMessage: {req.json()}")
+                time.sleep(3)
+                continue
+            else:
+                print("Localização salva no banco de dados:", element)
+                break
+        except Exception as e:
+            print("Erro ao fazer requisição na API:", e)
+            time.sleep(3)
+            continue
+
+
+def consume_queue():
+    connection = pika.BlockingConnection(pika.ConnectionParameters("localhost"))
+    channel = connection.channel()
+    queue_name = "localizacao_queue"
+    channel.queue_declare(queue=queue_name)
+    channel.basic_consume(queue=queue_name, on_message_callback=get_elements_in_queue, auto_ack=True)
+    channel.start_consuming()
+
+if __name__ == "__main__":
+    consume_queue()
+
+***** System 2\requirements.txt *****
+flask
+flask_restful
+flask_socketio
+flask_sqlalchemy
+pika
+redis
+redis[hiredis]
+websockets
+grpcio
+grpcio-tools
+
+***** System 2\web_socket.py *****
+import asyncio
+import websockets
+from websockets.server import serve
+
+connected_clients = set()
+
+async def handle_client(websocket):
+    connected_clients.add(websocket)
+    try:
+        async for message in websocket:
+            print(f"Received message from client: {message}")
+            await broadcast_message(message)
+    except websockets.exceptions.ConnectionClosedOK as e:
+        print(f"Connection closed with status code 1000: {e}")
+    except websockets.exceptions.ConnectionClosedError as e:
+        print(f"Connection closed with error: {e}")
+    finally:
+        connected_clients.remove(websocket)
+
+async def broadcast_message(message):
+    if connected_clients:
+        await asyncio.gather(*[client.send(message) for client in connected_clients])
+
+async def main():
+    async with serve(handle_client, "localhost", 8765):
+        await asyncio.Future()  # run forever
+
+asyncio.run(main())
+
+***** System 2\instance\CREATE.sql *****
+CREATE TABLE dispositivo (
+	id VARCHAR(36) NOT NULL, 
+	nome VARCHAR(50) NOT NULL, 
+	codigo VARCHAR(50) NOT NULL, 
+	marca VARCHAR(50) NOT NULL, 
+	PRIMARY KEY (id), 
+	UNIQUE (id)
+)
+
+CREATE TABLE localizacao (
+	id varchar(36) primary key
+	,id_dispositivo varchar(36)
+	,latitude real
+	,longitude real
+	
+	,FOREIGN KEY (id_dispositivo) REFERENCES dispositivo(id)
+)
+
+***** System 2\instance\database.sqlite3 *****
+
+
+***** System 2\src\models.py *****
+import uuid
+from src import db
+
+class Dispositivo(db.Model):
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()), nullable=False)
+    nome = db.Column(db.String(50), nullable=False)
+    codigo = db.Column(db.String(50), nullable=False)
+    marca = db.Column(db.String(50), nullable=False)
+    localizacoes = db.relationship('Localizacao', backref='dispositivo', lazy=True)
+
+class Localizacao(db.Model):
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()), nullable=False)
+    id_dispositivo = db.Column(db.String(36), db.ForeignKey('dispositivo.id'), nullable=False)
+    latitude = db.Column(db.Float, nullable=False)
+    longitude = db.Column(db.Float, nullable=False)
+
+***** System 2\src\redis.py *****
+from src import r
+from datetime import datetime, timedelta
+
+def send_dict(data):
+    ttl = timedelta(hours=24)
+    name = f"disp_loc:{data['id_dispositivo']}:{data['id_localizacao']}"
+    r.hset(name=name, mapping=data)
+    r.expire(name=name, time=ttl)
+
+def get_valid_records(id_dispositivo):
+    valid_records = []
+    all_keys = r.keys(f"disp_loc:{id_dispositivo}:*")  # Obtém todas as chaves relevantes
+
+    for key in all_keys:
+        remaining_time = r.ttl(key)
+        if remaining_time > 0:
+            # A chave ainda não expirou
+            record = r.hgetall(key)
+            valid_records.append(record)
+
+    return valid_records
+
+
+***** System 2\src\resources.py *****
+import json
+from flask import request, make_response, jsonify
+from flask_restful import Resource
+from src import db, api
+from src.models import Dispositivo, Localizacao
+from src.redis import send_dict, get_valid_records
+from websockets.sync.client import connect
+from datetime import datetime
+
+from src import grpc
+
+class DispositivoResource(Resource):
+    def get(self, id_dispositivo):
+        dispositivo = Dispositivo.query.get(id_dispositivo)
+        if dispositivo:
+            return {
+                'id': dispositivo.id,
+                'nome': dispositivo.nome,
+                'codigo': dispositivo.codigo,
+                'marca': dispositivo.marca
+            }
+        return {"message": "Dispositivo não encontrado"}, 404
+
+    def post(self):
+        data = request.get_json()
+
+        new_dispositivo = Dispositivo(
+                nome=data.get('nome'),
+                codigo=data.get('codigo'),
+                marca=data.get('marca')
+            )
+        db.session.add(new_dispositivo)
+        db.session.commit()
+
+        # Envia pro GRPC
+        grpc.send_grpc_dispo(new_dispositivo.id, new_dispositivo.marca)
+
+        return {
+            'id': new_dispositivo.id,
+            'nome': data.get('nome'),
+            'codigo': data.get('codigo'),
+            'marca': data.get('marca')
+        }
+
+    def put(self, id_dispositivo):
+        data = request.get_json()
+        dispositivo = Dispositivo.query.get(id_dispositivo)
+        if dispositivo:
+            dispositivo.nome = data.get('nome', dispositivo.nome)
+            dispositivo.codigo = data.get('codigo', dispositivo.codigo)
+            dispositivo.marca = data.get('marca', dispositivo.marca)
+            db.session.commit()
+        else:
+            return "Dispotivo não encontrado!"
+
+        return {
+            'id': id_dispositivo,
+            'nome': data.get('nome'),
+            'codigo': data.get('codigo'),
+            'marca': data.get('marca')
+        }
+
+    def delete(self, id_dispositivo):
+        dispositivo = Dispositivo.query.get(id_dispositivo)
+        if dispositivo:
+            db.session.delete(dispositivo)
+            db.session.commit()
+            return {"message": "Dispositivo removido com sucesso"}
+        return {"message": "Dispositivo não encontrado"}, 404
+
+class LocalizacaoResource(Resource):
+    def post(self):
+        data = request.get_json()
+
+        new_localizacao = Localizacao(
+                id_dispositivo=data.get('id_dispositivo'),
+                latitude=data.get('latitude'),
+                longitude=data.get('longitude')
+            )
+        db.session.add(new_localizacao)
+        db.session.commit()
+
+        dispositivo = Dispositivo.query.get(new_localizacao.id_dispositivo)
+
+        data = {"id_dispositivo" : dispositivo.id
+                ,"id_localizacao" : new_localizacao.id
+                ,"latitude" : new_localizacao.latitude
+                ,"longitude" : new_localizacao.longitude
+                ,"data" : datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+            }
+
+        # REDIS
+        send_dict(data)
+
+        del data["id_localizacao"]
+        del data["data"]
+
+        # WEB SOCKET
+        with connect("ws://localhost:8765") as websocket:
+            websocket.send(json.dumps(data))
+
+        return {
+            'id': new_localizacao.id,
+            'id_dispositivo': data.get('id_dispositivo'),
+            'latitude': data.get('latitude'),
+            'longitude': data.get('longitude')
+        }
+
+class HistoricoLocalizacaoResource(Resource):
+    def get(self, id_dispositivo):
+        try:
+            return get_valid_records(id_dispositivo)
+        except Exception:
+            return make_response(jsonify("Internal Server Error")), 500
+
+api.add_resource(DispositivoResource, '/dispositivo', '/dispositivo/<string:id_dispositivo>')
+api.add_resource(HistoricoLocalizacaoResource, '/historico/<string:id_dispositivo>')
+api.add_resource(LocalizacaoResource, '/localizacao')
+
+***** System 2\src\routes.py *****
+from flask import make_response, jsonify
+from src import app
+
+@app.route("/")
+def raiz():
+    return make_response(jsonify({"Mensagem" : "Api esta funcionando!"})), 200
+
+***** System 2\src\__init__.py *****
+from flask import Flask
+from flask_restful import Api
+from flask_socketio import SocketIO
+from flask_sqlalchemy import SQLAlchemy
+import redis
+
+from src.rpc.rpc_client import GrpcClient
+
+app = Flask(__name__)
+api = Api(app)
+socketio = SocketIO(app)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.sqlite3'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+
+r = redis.Redis(host='localhost', port=6379, decode_responses=True)
+
+grpc = GrpcClient()
+
+import src.models
+import src.resources
+import src.routes
+
+
+***** System 2\src\rpc\rpc.proto *****
+syntax = "proto3";
+
+package trabalho_sabatine;
+
+service ApiService {
+  rpc SendDispo (SendDispoRequest) returns (SendDispoReply) {}
+
+  rpc SendDispoStreamReply (SendDispoRequest) returns (stream SendDispoReply) {}
+}
+
+message SendDispoRequest {
+  string id_dispositivo = 1;
+  string marca = 2;
+}
+
+message SendDispoReply {
+  string message = 1;
+}
+
+
+***** System 2\src\rpc\rpc_client.py *****
+import grpc
+import src.rpc.rpc_pb2 as rpc_pb2
+import src.rpc.rpc_pb2_grpc as rpc_pb2_grpc
+
+class GrpcClient:
+    def send_grpc_dispo(self, id_dispositivo, marca):
+        request = rpc_pb2.SendDispoRequest(
+            id_dispositivo=id_dispositivo,
+            marca=marca
+        )
+
+        with grpc.insecure_channel('localhost:50051') as channel:
+            stub = rpc_pb2_grpc.ApiServiceStub(channel)
+
+            try:
+                response = stub.SendDispo(request)
+                return response
+            except grpc.RpcError as e:
+                return e
+
+
+***** System 2\src\rpc\rpc_pb2.py *****
+# -*- coding: utf-8 -*-
+# Generated by the protocol buffer compiler.  DO NOT EDIT!
+# source: rpc.proto
+"""Generated protocol buffer code."""
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import descriptor_pool as _descriptor_pool
+from google.protobuf import symbol_database as _symbol_database
+from google.protobuf.internal import builder as _builder
+# @@protoc_insertion_point(imports)
+
+_sym_db = _symbol_database.Default()
+
+
+
+
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\trpc.proto\x12\x11trabalho_sabatine\"9\n\x10SendDispoRequest\x12\x16\n\x0eid_dispositivo\x18\x01 \x01(\t\x12\r\n\x05marca\x18\x02 \x01(\t\"!\n\x0eSendDispoReply\x12\x0f\n\x07message\x18\x01 \x01(\t2\xc7\x01\n\nApiService\x12U\n\tSendDispo\x12#.trabalho_sabatine.SendDispoRequest\x1a!.trabalho_sabatine.SendDispoReply\"\x00\x12\x62\n\x14SendDispoStreamReply\x12#.trabalho_sabatine.SendDispoRequest\x1a!.trabalho_sabatine.SendDispoReply\"\x00\x30\x01\x62\x06proto3')
+
+_globals = globals()
+_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'rpc_pb2', _globals)
+if _descriptor._USE_C_DESCRIPTORS == False:
+  DESCRIPTOR._options = None
+  _globals['_SENDDISPOREQUEST']._serialized_start=32
+  _globals['_SENDDISPOREQUEST']._serialized_end=89
+  _globals['_SENDDISPOREPLY']._serialized_start=91
+  _globals['_SENDDISPOREPLY']._serialized_end=124
+  _globals['_APISERVICE']._serialized_start=127
+  _globals['_APISERVICE']._serialized_end=326
+# @@protoc_insertion_point(module_scope)
+
+
+***** System 2\src\rpc\rpc_pb2_grpc.py *****
+# Generated by the gRPC Python protocol compiler plugin. DO NOT EDIT!
+"""Client and server classes corresponding to protobuf-defined services."""
+import grpc
+
+import src.rpc.rpc_pb2 as rpc__pb2
+
+
+class ApiServiceStub(object):
+    """Missing associated documentation comment in .proto file."""
+
+    def __init__(self, channel):
+        """Constructor.
+
+        Args:
+            channel: A grpc.Channel.
+        """
+        self.SendDispo = channel.unary_unary(
+                '/trabalho_sabatine.ApiService/SendDispo',
+                request_serializer=rpc__pb2.SendDispoRequest.SerializeToString,
+                response_deserializer=rpc__pb2.SendDispoReply.FromString,
+                )
+        self.SendDispoStreamReply = channel.unary_stream(
+                '/trabalho_sabatine.ApiService/SendDispoStreamReply',
+                request_serializer=rpc__pb2.SendDispoRequest.SerializeToString,
+                response_deserializer=rpc__pb2.SendDispoReply.FromString,
+                )
+
+
+class ApiServiceServicer(object):
+    """Missing associated documentation comment in .proto file."""
+
+    def SendDispo(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SendDispoStreamReply(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_ApiServiceServicer_to_server(servicer, server):
+    rpc_method_handlers = {
+            'SendDispo': grpc.unary_unary_rpc_method_handler(
+                    servicer.SendDispo,
+                    request_deserializer=rpc__pb2.SendDispoRequest.FromString,
+                    response_serializer=rpc__pb2.SendDispoReply.SerializeToString,
+            ),
+            'SendDispoStreamReply': grpc.unary_stream_rpc_method_handler(
+                    servicer.SendDispoStreamReply,
+                    request_deserializer=rpc__pb2.SendDispoRequest.FromString,
+                    response_serializer=rpc__pb2.SendDispoReply.SerializeToString,
+            ),
+    }
+    generic_handler = grpc.method_handlers_generic_handler(
+            'trabalho_sabatine.ApiService', rpc_method_handlers)
+    server.add_generic_rpc_handlers((generic_handler,))
+
+
+ # This class is part of an EXPERIMENTAL API.
+class ApiService(object):
+    """Missing associated documentation comment in .proto file."""
+
+    @staticmethod
+    def SendDispo(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/trabalho_sabatine.ApiService/SendDispo',
+            rpc__pb2.SendDispoRequest.SerializeToString,
+            rpc__pb2.SendDispoReply.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def SendDispoStreamReply(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(request, target, '/trabalho_sabatine.ApiService/SendDispoStreamReply',
+            rpc__pb2.SendDispoRequest.SerializeToString,
+            rpc__pb2.SendDispoReply.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+
+***** System 3\CREATE.sql *****
+PRAGMA FOREIGN_KEYS = ON;
+
+CREATE TABLE IF NOT EXISTS dispositivo (
+	id_dispositivo CHAR(36) PRIMARY KEY
+	,marca CHAR(50) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS dispo_info (
+	id_dispositivo CHAR(36)
+	,quantidade_pos NUMERIC DEFAULT(0)
+	,total_km REAL DEFAULT(0)
+	,data TEXT
+	
+	,FOREIGN KEY (id_dispositivo) REFERENCES dispositivo(id_dispositivo)
+);
+
+***** System 3\database.sqlite3 *****
+
+
+***** System 3\expurgo.js *****
+const sqlite3 = require('sqlite3').verbose();
+const db = new sqlite3.Database('database.sqlite3');
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function expurgo() {
+    while (true) {
+        const currentDate = new Date();
+        const fiveDaysAgo = new Date(currentDate.getTime() - 5 * 24 * 60 * 60 * 1000);
+        const formattedFiveDaysAgo = fiveDaysAgo.toISOString().slice(0, 19).replace("T", " ");
+
+        const deleteQuery = `DELETE FROM dispo_info WHERE data < ?`;
+
+        db.run(deleteQuery, [formattedFiveDaysAgo], function (err) {
+            if (err) {
+                console.error(err.message);
+            } else {
+                console.log(`Records older than 5 days ago deleted successfully.`);
+            }
+        });
+
+        await sleep(30000);
+    }
+}
+
+expurgo();
+
+***** System 3\graph_ql.js *****
+const express = require('express');
+const { graphqlHTTP } = require('express-graphql');
+const { buildSchema } = require('graphql');
+const { DateScalar } = require("./graph_ql_date_scalar");
+
+const sqlite3 = require('sqlite3').verbose();
+
+// Connect to the SQLite database (or create a new one if it doesn't exist)
+const db = new sqlite3.Database('database.sqlite3');
+
+// Define GraphQL schema
+const schema = buildSchema(`
+  scalar Date
+
+  type Dispositivo {
+    id_dispositivo: String
+    marca: String
+    quantidade_pos: Int
+    total_km: Float
+    data: Date
+  }
+
+  type Query {
+    geral: [Dispositivo]
+    por_dispo(id_dispositivo: String): [Dispositivo]
+    por_marca(marca: String): [Dispositivo]
+  }
+`);
+
+// Define resolvers
+const resolvers = {
+    geral: () => {
+        // Query data from the SQLite database
+        return new Promise((resolve, reject) => {
+            let query = `
+        SELECT dispo.id_dispositivo, dispo.marca, dispo_info.quantidade_pos, dispo_info.total_km, dispo_info.data
+        FROM dispositivo AS dispo
+        LEFT JOIN dispo_info ON dispo.id_dispositivo = dispo_info.id_dispositivo
+        ORDER BY data DESC
+      `;
+
+            db.all(query, (err, rows) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(rows);
+                }
+            });
+        });
+    },
+
+    por_dispo: (data) => {
+        // Query data from the SQLite database
+        return new Promise((resolve, reject) => {
+            let query = `
+        SELECT dispo.id_dispositivo, dispo.marca, dispo_info.quantidade_pos, dispo_info.total_km, dispo_info.data
+        FROM dispositivo AS dispo
+        LEFT JOIN dispo_info ON dispo.id_dispositivo = dispo_info.id_dispositivo
+        WHERE dispo.id_dispositivo = ?
+        ORDER BY data DESC
+      `;
+
+            db.all(query, [data.id_dispositivo], (err, rows) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(rows);
+                }
+            });
+        });
+    },
+
+    por_marca: (data) => {
+        // Query data from the SQLite database
+        return new Promise((resolve, reject) => {
+            let query = `
+        SELECT dispo.id_dispositivo, dispo.marca, dispo_info.quantidade_pos, dispo_info.total_km, dispo_info.data
+        FROM dispositivo AS dispo
+        LEFT JOIN dispo_info ON dispo.id_dispositivo = dispo_info.id_dispositivo
+        WHERE dispo.marca = ?
+        ORDER BY data DESC
+      `;
+
+            db.all(query, [data.marca], (err, rows) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(rows);
+                }
+            });
+        });
+    },
+};
+
+// Create an express app
+const app = express();
+
+// Set up GraphQL middleware
+app.use(
+    '/graphql',
+    graphqlHTTP({
+        schema: schema,
+        rootValue: resolvers,
+        graphiql: true, // Enable GraphiQL interface for testing
+    })
+);
+
+// Start the server
+const PORT = 3000;
+app.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}/graphql`);
+});
+
+
+***** System 3\graph_ql_date_scalar.js *****
+const { GraphQLScalarType, Kind } = require('graphql');
+
+const DateScalar = new GraphQLScalarType({
+  name: 'Date',
+  description: 'Custom scalar type for date',
+  serialize(value) {
+    // Assuming value is a JavaScript Date object
+    return value.toISOString();
+  },
+  parseValue(value) {
+    // Assuming value is a valid date string
+    return new Date(value);
+  },
+  parseLiteral(ast) {
+    if (ast.kind === Kind.STRING) {
+      // Assuming ast.value is a valid date string
+      return new Date(ast.value);
+    }
+    return null;
+  },
+});
+
+module.exports = {
+  DateScalar,
+};
+
+
+***** System 3\grpc_server.js *****
+var PROTO_PATH = '../System 2/src/rpc/rpc.proto';
+
+const sqlite3 = require('sqlite3').verbose();
+const db = new sqlite3.Database('./database.sqlite3');
+
+var grpc = require('@grpc/grpc-js');
+var protoLoader = require('@grpc/proto-loader');
+
+var packageDefinition = protoLoader.loadSync(
+    PROTO_PATH,
+    {
+        keepCase: true,
+        longs: String,
+        enums: String,
+        defaults: true,
+        oneofs: true
+    }
+);
+
+var trabalho_proto = grpc.loadPackageDefinition(packageDefinition).trabalho_sabatine;
+
+const insertDispo = db.prepare('INSERT INTO dispositivo (id_dispositivo, marca) VALUES (?, ?)');
+
+function sendDispo(call, callback) {
+    insertDispo.run(call.request.id_dispositivo, call.request.marca);
+    callback(null, { message: "Dispo Recebido" });
+}
+
+function onShutdown() {
+    db.close((err) => {
+        if (err) {
+            console.error(err.message);
+            process.exit(0);
+        } else {
+            console.log('Database connection closed.');
+            process.exit(0);
+        }
+    });
+}
+
+function main() {
+    var server = new grpc.Server();
+    server.addService(trabalho_proto.ApiService.service, { SendDispo: sendDispo });
+
+    server.tryShutdown = onShutdown;
+
+    process.on('SIGINT', () => {
+        console.log('Received SIGINT signal. Initiating server shutdown.');
+        server.tryShutdown(() => {
+            console.log('Server shutdown complete.');
+        });
+    });
+
+    process.on('SIGTERM', () => {
+        console.log('Received SIGTERM signal. Initiating server shutdown.');
+        server.tryShutdown(() => {
+            console.log('Server shutdown complete.');
+        });
+    });
+
+    server.bindAsync('0.0.0.0:50051', grpc.ServerCredentials.createInsecure(), () => {
+        server.start();
+    });
+}
+
+main();
+
+***** System 3\index.html *****
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    <title>Trabalho Sabatine - System 3</title>
+    <style>
+        .half-width {
+            width: 50%;
+        }
+    </style>
+</head>
+<body class="arial">
+    <h1 style="padding-left: 5px;">Trabalho Sabatine - Sistema 3</h1>
+    <p style="padding-left: 5px;">Ultima posição recebida (lat | long): <span id="ultima_pos">0 | 0</span></p>
+
+    <script src="index.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+</body>
+</html>
+
+***** System 3\index.js *****
+const ws = new WebSocket('ws://localhost:8765');
+
+ws.addEventListener('open', () => {
+  console.log('Connected to WebSocket server');
+});
+
+ws.addEventListener('message', (event) => {
+  console.log(`Received: ${event.data}`);
+  message = JSON.parse(event.data);
+
+  updateLayout(`${message.latitude.toFixed(2)} | ${message.longitude.toFixed(2)}`);
+});
+
+function updateLayout(message) {
+  const messageContainer = document.getElementById('ultima_pos');
+  messageContainer.innerHTML = message;
+}
+
+***** System 3\package-lock.json *****
+
+
+***** System 3\package.json *****
+{
+  "name": "system-3",
+  "version": "1.0.0",
+  "description": "Sistema 3 do Trabalho Final do Sabatine",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "EPICO"
+  ],
+  "author": "Os Homens",
+  "license": "ISC",
+  "dependencies": {
+    "@grpc/grpc-js": "^1.9.9",
+    "express": "^4.18.2",
+    "express-graphql": "^0.12.0",
+    "graphql": "^16.8.1",
+    "minimist": "^1.2.8",
+    "sqlite3": "^5.1.6",
+    "ws": "^8.14.2"
+  }
+}
+
+
+***** System 3\web_socket_client.js *****
+const WebSocket = require('ws');
+
+const http = require('http');
+
+const sqlite3 = require('sqlite3').verbose();
+const db = new sqlite3.Database('./database.sqlite3');
+
+const insertPos = db.prepare('INSERT INTO dispo_info (id_dispositivo, quantidade_pos, total_km, data) VALUES (?, ?, ?, ?)');
+
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Radius of the Earth in kilometers
+    const dLat = deg2rad(lat2 - lat1);
+    const dLon = deg2rad(lon2 - lon1);
+
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    const distance = R * c; // Distance in kilometers
+
+    return distance;
+}
+
+function deg2rad(deg) {
+    return deg * (Math.PI / 180);
+}
+
+function receive_messages() {
+    const websocket = new WebSocket('ws://localhost:8765');
+
+    websocket.on('open', () => {
+        // You can send a message here if needed
+        // websocket.send('Hello world!');
+    });
+
+    websocket.on('message', (message) => {
+        console.log(`Received: ${message}`);
+        message = JSON.parse(message);
+
+        let options = {
+            hostname: 'localhost',
+            port: 3333,
+            path: '/historico/' + message.id_dispositivo,
+            method: 'GET',
+        };
+
+        const req = http.request(options, (res) => {
+            let data = '';
+
+            // A chunk of data has been received.
+            res.on('data', (chunk) => {
+                data += chunk;
+            });
+
+            // The whole response has been received.
+            res.on('end', () => {
+                if (data) {
+                    data = JSON.parse(data);
+                    data.sort((a, b) => new Date(b.data) - new Date(a.data));
+                    let total_km = 0
+                    if (data.length > 1) {
+                        total_km = calculateDistance(data[1].latitude, data[1].longitude, message.latitude, message.longitude);
+                    }
+                    db.get(
+                        'SELECT * FROM dispo_info WHERE id_dispositivo = ? ORDER BY data DESC LIMIT 1',
+                        [message.id_dispositivo],
+                        (err, row) => {
+                            if (err) {
+                                console.error(err.message);
+                            } else {
+                                if (row) {
+                                    insertPos.run(message.id_dispositivo, row.quantidade_pos+1, row.total_km+total_km, new Date());
+                                } else {
+                                    insertPos.run(message.id_dispositivo, 1, total_km, new Date());
+                                }
+                            }
+                        });
+                }
+            });
+        });
+
+        req.on('error', (error) => {
+            console.error('Error making GET request:', error.message);
+        });
+
+        // End the request
+        req.end();
+    });
+
+    websocket.on('close', () => {
+        console.log('WebSocket connection closed.');
+    });
+
+    websocket.on('error', (error) => {
+        console.error(`WebSocket error: ${error.message}`);
+    });
+}
+
+receive_messages();
+
+***** System 3\Mapa\mapa.html *****
+<!DOCTYPE html>
+<html>
+  <head>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""></script>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <div id="map"></div>
+    
+    <script src="script.js"></script>
+  </body>
+</html>
+
+***** System 3\Mapa\script.js *****
+var lat = 35.58;
+var long = 104.61;
+
+const sleep = (milliseconds) => {
+    return new Promise(resolve => setTimeout(resolve, milliseconds))
+}
+
+var map = L.map('map');
+
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+}).addTo(map);
+
+
+var marker = L.marker([lat, long]);
+
+for(let i = 0; i <= 50; i++)
+{
+    // Busca na API, ela vai atualizar lat e long
+    lat += 0.01;
+    long += 0.01;
+
+    // Remove o antigo, póe o novo, e volta a buscar na API
+    marker.removeFrom(map);
+    marker = L.marker([lat, long]);
+    map.setView([lat, long], 13);
+    marker.addTo(map);
+}
+
+***** System 3\Mapa\style.css *****
+#map{
+    height: 100vh;
+    width: 100%;
+}
+
